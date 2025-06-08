@@ -3,6 +3,7 @@ local UILib = {}
 -- Services
 local CoreGui = game:GetService("CoreGui")
 local UserInput = game:GetService("UserInputService")
+local TweenService = game:GetService("TweenService")
 local HttpService = game:GetService("HttpService")
 
 -- Settings persistence
@@ -14,26 +15,34 @@ pcall(function()
     settings = HttpService:JSONDecode(readfile(SETTINGS_FILE))
 end)
 
--- Save settings
 local function save()
     writefile(SETTINGS_FILE, HttpService:JSONEncode(settings))
 end
 
--- Create GUI container
+-- Main UI container
 local ScreenGui = Instance.new("ScreenGui")
 ScreenGui.Name = "CustomUILib"
 ScreenGui.ResetOnSpawn = false
 ScreenGui.Parent = CoreGui
 
--- Draggable Frame
+-- Rounded corner utility function
+local function addRoundedCorners(frame, radius)
+    local uicorner = Instance.new("UICorner")
+    uicorner.CornerRadius = UDim.new(0, radius or 8)
+    uicorner.Parent = frame
+    return uicorner
+end
+
+-- Main Frame
 local MainFrame = Instance.new("Frame")
 MainFrame.Size = UDim2.new(0, 400, 0, 450)
 MainFrame.Position = UDim2.new(0.5, -200, 0.5, -225)
-MainFrame.BackgroundColor3 = Color3.fromRGB(20,20,20)
+MainFrame.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
 MainFrame.BorderSizePixel = 0
 MainFrame.Parent = ScreenGui
+addRoundedCorners(MainFrame, 12)
 
--- Dragging logic
+-- Dragging logic (unchanged)
 local dragging, dragInput, dragStart, startPos
 MainFrame.InputBegan:Connect(function(input)
     if input.UserInputType == Enum.UserInputType.MouseButton1 then
@@ -60,247 +69,211 @@ UserInput.InputChanged:Connect(function(input)
     end
 end)
 
--- Title
-local Title = Instance.new("TextLabel")
-Title.Text = "Executor UI"
-Title.Size = UDim2.new(1, 0, 0, 40)
-Title.BackgroundColor3 = Color3.fromRGB(30,30,30)
-Title.TextColor3 = Color3.new(1,1,1)
-Title.Font = Enum.Font.SourceSansBold
-Title.TextSize = 20
-Title.Parent = MainFrame
+-- Title Bar
+local TitleBar = Instance.new("Frame", MainFrame)
+TitleBar.Size = UDim2.new(1, 0, 0, 40)
+TitleBar.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+addRoundedCorners(TitleBar, 12)
 
--- Tab container & sidebar
-local Tabs = {}
-local currentTab
+local TitleLabel = Instance.new("TextLabel", TitleBar)
+TitleLabel.Text = "Executor UI"
+TitleLabel.Size = UDim2.new(1, -120, 1, 0)
+TitleLabel.BackgroundTransparency = 1
+TitleLabel.TextColor3 = Color3.new(1,1,1)
+TitleLabel.Font = Enum.Font.SourceSansBold
+TitleLabel.TextSize = 20
+TitleLabel.TextXAlignment = Enum.TextXAlignment.Left
+TitleLabel.Position = UDim2.new(0, 10, 0, 0)
+
+-- Control Buttons container
+local Controls = Instance.new("Frame", TitleBar)
+Controls.Size = UDim2.new(0, 110, 1, 0)
+Controls.Position = UDim2.new(1, -110, 0, 0)
+Controls.BackgroundTransparency = 1
+
+local function createControlButton(parent, text, color)
+    local btn = Instance.new("TextButton", parent)
+    btn.Size = UDim2.new(0, 30, 0, 30)
+    btn.BackgroundColor3 = color
+    btn.Text = text
+    btn.TextColor3 = Color3.new(1,1,1)
+    btn.Font = Enum.Font.SourceSansBold
+    btn.TextSize = 20
+    btn.AutoButtonColor = false
+    addRoundedCorners(btn, 6)
+    return btn
+end
+
+local MinimizeBtn = createControlButton(Controls, "─", Color3.fromRGB(60, 60, 60))
+MinimizeBtn.Position = UDim2.new(0, 0, 0, 5)
+local FullscreenBtn = createControlButton(Controls, "⬜", Color3.fromRGB(80, 80, 80))
+FullscreenBtn.Position = UDim2.new(0, 40, 0, 5)
+local CloseBtn = createControlButton(Controls, "✕", Color3.fromRGB(180, 50, 50))
+CloseBtn.Position = UDim2.new(0, 80, 0, 5)
+
+local minimized = false
+local fullscreen = false
+local originalSize = MainFrame.Size
+local originalPosition = MainFrame.Position
+
+MinimizeBtn.MouseButton1Click:Connect(function()
+    if minimized then
+        -- Restore
+        MainFrame.Size = originalSize
+        ContentHolder.Visible = true
+        Sidebar.Visible = true
+        minimized = false
+    else
+        -- Minimize
+        originalSize = MainFrame.Size
+        MainFrame.Size = UDim2.new(MainFrame.Size.X.Scale, MainFrame.Size.X.Offset, 0, 40)
+        ContentHolder.Visible = false
+        Sidebar.Visible = false
+        minimized = true
+    end
+end)
+
+FullscreenBtn.MouseButton1Click:Connect(function()
+    if fullscreen then
+        MainFrame.Size = originalSize
+        MainFrame.Position = originalPosition
+        fullscreen = false
+    else
+        originalSize = MainFrame.Size
+        originalPosition = MainFrame.Position
+        MainFrame.Size = UDim2.new(1, -20, 1, -20)
+        MainFrame.Position = UDim2.new(0, 10, 0, 10)
+        fullscreen = true
+    end
+end)
+
+-- Confirmation Popup for Close
+local function showCloseConfirm()
+    local popup = Instance.new("Frame", ScreenGui)
+    popup.Size = UDim2.new(0, 300, 0, 150)
+    popup.Position = UDim2.new(0.5, -150, 0.5, -75)
+    popup.BackgroundColor3 = Color3.fromRGB(30,30,30)
+    addRoundedCorners(popup, 12)
+    popup.ZIndex = 1000
+
+    local label = Instance.new("TextLabel", popup)
+    label.Text = "Are you sure you want to close?"
+    label.Size = UDim2.new(1, -20, 0, 60)
+    label.Position = UDim2.new(0, 10, 0, 10)
+    label.BackgroundTransparency = 1
+    label.TextColor3 = Color3.new(1,1,1)
+    label.Font = Enum.Font.SourceSansBold
+    label.TextSize = 18
+
+    local yesBtn = Instance.new("TextButton", popup)
+    yesBtn.Text = "Yes"
+    yesBtn.Size = UDim2.new(0, 100, 0, 40)
+    yesBtn.Position = UDim2.new(0, 40, 1, -60)
+    yesBtn.BackgroundColor3 = Color3.fromRGB(50,150,50)
+    yesBtn.TextColor3 = Color3.new(1,1,1)
+    addRoundedCorners(yesBtn, 8)
+
+    local noBtn = Instance.new("TextButton", popup)
+    noBtn.Text = "No"
+    noBtn.Size = UDim2.new(0, 100, 0, 40)
+    noBtn.Position = UDim2.new(1, -140, 1, -60)
+    noBtn.BackgroundColor3 = Color3.fromRGB(150,50,50)
+    noBtn.TextColor3 = Color3.new(1,1,1)
+    addRoundedCorners(noBtn, 8)
+
+    yesBtn.MouseButton1Click:Connect(function()
+        ScreenGui:Destroy()
+    end)
+    noBtn.MouseButton1Click:Connect(function()
+        popup:Destroy()
+    end)
+end
+
+CloseBtn.MouseButton1Click:Connect(showCloseConfirm)
+
+-- Sidebar & ContentHolder (rounded corners + nicer layout)
 local Sidebar = Instance.new("Frame", MainFrame)
-Sidebar.Size = UDim2.new(0, 120, 1, -40)
+Sidebar.Size = UDim2.new(0, 140, 1, -40)
 Sidebar.Position = UDim2.new(0, 0, 0, 40)
-Sidebar.BackgroundTransparency = 1
+Sidebar.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+addRoundedCorners(Sidebar, 8)
 
 local SideListLayout = Instance.new("UIListLayout", Sidebar)
-SideListLayout.Padding = UDim.new(0, 5)
+SideListLayout.Padding = UDim.new(0, 10)
 SideListLayout.SortOrder = Enum.SortOrder.LayoutOrder
 
 local ContentHolder = Instance.new("Frame", MainFrame)
-ContentHolder.Size = UDim2.new(1, -120, 1, -40)
-ContentHolder.Position = UDim2.new(0, 120, 0, 40)
-ContentHolder.BackgroundTransparency = 1
+ContentHolder.Size = UDim2.new(1, -140, 1, -40)
+ContentHolder.Position = UDim2.new(0, 140, 0, 40)
+ContentHolder.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
+addRoundedCorners(ContentHolder, 8)
 
--- Notification Drawer
-local NotificationFrame = Instance.new("Frame", ScreenGui)
-NotificationFrame.Position = UDim2.new(0, 10, 0, 10)
-NotificationFrame.Size = UDim2.new(0, 250, 0, 0)
-NotificationFrame.BackgroundTransparency = 1
+-- Tabs container and logic
+local Tabs = {}
+local currentTab
 
-function UILib:CreateNotification(title, text, duration)
-    local notif = Instance.new("Frame", NotificationFrame)
-    notif.Size = UDim2.new(1, 0, 0, 60)
-    notif.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
-    notif.BorderSizePixel = 0
-    
-    local T = Instance.new("TextLabel", notif)
-    T.Text = title
-    T.Font = Enum.Font.SourceSansBold
-    T.TextSize = 18
-    T.TextColor3 = Color3.new(1,1,1)
-    T.BackgroundTransparency = 1
-    T.Size = UDim2.new(1, 0, 0, 25)
-
-    local B = Instance.new("TextLabel", notif)
-    B.Text = text
-    B.Font = Enum.Font.SourceSans
-    B.TextSize = 14
-    B.TextColor3 = Color3.new(1,1,1)
-    B.BackgroundTransparency = 1
-    B.Position = UDim2.new(0,0,0,25)
-    B.Size = UDim2.new(1,0,0,30)
-
-    -- Slide down
-    notif:TweenSize(UDim2.new(1,0,0,60), "Out", "Quad", 0.2,true)
-    
-    -- Auto-remove
-    delay(duration, function()
-        notif:TweenSize(UDim2.new(1,0,0,0), "In", "Quad", 0.2,true)
-        wait(0.3)
-        notif:Destroy()
-    end)
-end
-
--- Add Tab
-function UILib:CreateTab(name)
-    local tabFrame = Instance.new("Frame", ContentHolder)
-    tabFrame.Size = UDim2.new(1,0,1,0)
-    tabFrame.Visible = false
-    
+function UILib:AddTab(name, iconId)
     local btn = Instance.new("TextButton", Sidebar)
-    btn.Text = name
-    btn.Size = UDim2.new(1,0,0,30)
-    btn.Font = Enum.Font.SourceSans
-    btn.TextSize = 16
-    btn.BackgroundColor3 = Color3.fromRGB(50,50,50)
+    btn.Text = "  " .. name
+    btn.TextXAlignment = Enum.TextXAlignment.Left
+    btn.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
     btn.TextColor3 = Color3.new(1,1,1)
-    btn.MouseButton1Click:Connect(function()
-        if currentTab then currentTab.Visible = false end
-        tabFrame.Visible = true
-        currentTab = tabFrame
-    end)
-    Tabs[name] = tabFrame
-    
-    -- make first tab default
-if not currentTab then
-    tabFrame.Visible = true
-    currentTab = tabFrame
-end
+    btn.Font = Enum.Font.SourceSans
+    btn.TextSize = 18
+    btn.Size = UDim2.new(1, -20, 0, 40)
+    btn.AutoButtonColor = false
+    addRoundedCorners(btn, 6)
 
-    
+    -- Add icon image if iconId is provided
+    if iconId then
+        local icon = Instance.new("ImageLabel", btn)
+        icon.Size = UDim2.new(0, 24, 0, 24)
+        icon.Position = UDim2.new(0, 4, 0.5, -12)
+        icon.BackgroundTransparency = 1
+        icon.Image = "rbxassetid://" .. tostring(iconId)
+    end
+
+    local tabFrame = Instance.new("Frame", ContentHolder)
+    tabFrame.Size = UDim2.new(1, 0, 1, 0)
+    tabFrame.BackgroundTransparency = 1
+    tabFrame.Visible = false
+
+    btn.MouseButton1Click:Connect(function()
+        if currentTab then
+            -- Tween out old tab
+            TweenService:Create(currentTab, TweenInfo.new(0.3), {BackgroundTransparency = 1}):Play()
+            currentTab.Visible = false
+        end
+        tabFrame.Visible = true
+        -- Tween in new tab
+        tabFrame.BackgroundTransparency = 0
+        currentTab = tabFrame
+
+        -- Highlight selected button
+        for _, b in ipairs(Sidebar:GetChildren()) do
+            if b:IsA("TextButton") then
+                b.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+            end
+        end
+        btn.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
+    end)
+
+    if #Tabs == 0 then
+        -- Auto select first tab
+        btn:MouseButton1Click()
+    end
+
+    table.insert(Tabs, {Name = name, Button = btn, Frame = tabFrame})
+
     return tabFrame
 end
 
--- UI Elements
-function UILib:AddButton(tab, text, callback)
-    local btn = Instance.new("TextButton", tab)
-    btn.Text = text
-    btn.Size = UDim2.new(1, -20, 0, 30)
-    btn.Position = UDim2.new(0,10,0, (#tab:GetChildren())*35)
-    btn.BackgroundColor3 = Color3.fromRGB(70,70,70)
-    btn.TextColor3 = Color3.new(1,1,1)
-    btn.MouseButton1Click:Connect(function() pcall(callback) end)
-end
+-- Keybind toggle UI visibility
+UserInput.InputBegan:Connect(function(input, gameProcessed)
+    if gameProcessed then return end
+    if input.KeyCode == Enum.KeyCode.RightControl then
+        MainFrame.Visible = not MainFrame.Visible
+    end
+end)
 
-function UILib:AddToggle(tab, text, default, callback)
-    local state = settings[text] ~= nil and settings[text] or default
-    settings[text] = state
-    
-    local btn = Instance.new("TextButton", tab)
-    btn.Text = text .. ": " .. (state and "ON" or "OFF")
-    btn.Size = UDim2.new(1, -20, 0, 30)
-    btn.Position = UDim2.new(0,10,0,(#tab:GetChildren())*35)
-    btn.BackgroundColor3 = Color3.fromRGB(70,70,70)
-    btn.TextColor3 = Color3.new(1,1,1)
-    btn.MouseButton1Click:Connect(function()
-        state = not state
-        settings[text] = state
-        save()
-        btn.Text = text .. ": " .. (state and "ON" or "OFF")
-        pcall(callback, state)
-    end)
-end
-
-function UILib:AddSlider(tab, text, min, max, default, callback)
-    settings[text] = settings[text] or default
-    local frame = Instance.new("Frame", tab)
-    frame.Size = UDim2.new(1, -20, 0, 50)
-    frame.Position = UDim2.new(0,10,0,(#tab:GetChildren())*55)
-    
-    local label = Instance.new("TextLabel", frame)
-    label.Text = text .. ": " .. settings[text]
-    label.Size = UDim2.new(1,0,0,20)
-    label.TextColor3 = Color3.new(1,1,1)
-    label.BackgroundTransparency = 1
-    
-    local slider = Instance.new("Frame", frame)
-    slider.Size = UDim2.new((settings[text]-min)/(max-min), 0, 0, 10)
-    slider.Position = UDim2.new(0,0,0,25)
-    slider.BackgroundColor3 = Color3.fromRGB(120,120,120)
-    
-    local dragging = false
-    slider.InputBegan:Connect(function(i)
-        if i.UserInputType == Enum.UserInputType.MouseButton1 then dragging = true end
-    end)
-    UserInput.InputEnded:Connect(function(i)
-        if i.UserInputType == Enum.UserInputType.MouseButton1 then dragging = false end
-    end)
-    UserInput.InputChanged:Connect(function(i)
-        if dragging and i.UserInputType == Enum.UserInputType.MouseMovement then
-            local rel = (i.Position.X - slider.AbsolutePosition.X) / frame.AbsoluteSize.X
-            rel = math.clamp(rel, 0, 1)
-            local val = math.floor(min + rel*(max-min))
-            settings[text] = val
-            save()
-            label.Text = text .. ": " .. val
-            slider.Size = UDim2.new(rel, 0,0,10)
-            pcall(callback, val)
-        end
-    end)
-end
-
-function UILib:AddDropdown(tab, text, options, callback)
-    settings[text] = settings[text] or options[1]
-    local label = Instance.new("TextLabel", tab)
-    label.Text = text..": "..settings[text]
-    label.Size = UDim2.new(1,-20,0,30)
-    label.Position = UDim2.new(0,10,0,(#tab:GetChildren())*35)
-    label.TextColor3 = Color3.new(1,1,1)
-    label.BackgroundTransparency = 1
-    
-    local dropdown = Instance.new("TextButton", tab)
-    dropdown.Text = "▼"
-    dropdown.Size = UDim2.new(0,30,0,30)
-    dropdown.Position = UDim2.new(1,-40,(#tab:GetChildren())*35)
-    dropdown.MouseButton1Click:Connect(function()
-        local list = Instance.new("Frame", tab)
-        list.Size = UDim2.new(0,150,0,#options*25)
-        list.Position = dropdown.Position+UDim2.new(0,0,0,30)
-        list.BackgroundColor3 = Color3.fromRGB(60,60,60)
-        for i,opt in ipairs(options) do
-            local optBtn = Instance.new("TextButton", list)
-            optBtn.Text = opt
-            optBtn.Size = UDim2.new(1,0,0,25)
-            optBtn.Position = UDim2.new(0,0,0,(i-1)*25)
-            optBtn.MouseButton1Click:Connect(function()
-                settings[text] = opt
-                save()
-                label.Text = text..": "..opt
-                pcall(callback, opt)
-                list:Destroy()
-            end)
-        end
-    end)
-end
-
-function UILib:AddKeybind(tab, text, defaultKey, callback)
-    settings[text] = settings[text] or defaultKey
-
-    local label = Instance.new("TextLabel", tab)
-    label.Text = text .. ": [" .. settings[text] .. "]"
-    label.Size = UDim2.new(1, -20, 0, 30)
-    label.Position = UDim2.new(0, 10, 0, (#tab:GetChildren()) * 35)
-    label.TextColor3 = Color3.new(1, 1, 1)
-    label.BackgroundTransparency = 1
-    label.TextXAlignment = Enum.TextXAlignment.Left
-
-    local changeBtn = Instance.new("TextButton", tab)
-    changeBtn.Text = "Change"
-    changeBtn.Size = UDim2.new(0, 60, 0, 30)
-    changeBtn.Position = UDim2.new(1, -70, 0, (#tab:GetChildren() - 1) * 35)
-    changeBtn.BackgroundColor3 = Color3.fromRGB(70, 70, 70)
-    changeBtn.TextColor3 = Color3.new(1, 1, 1)
-
-    changeBtn.MouseButton1Click:Connect(function()
-        label.Text = text .. ": [Press any key]"
-        local conn
-        conn = UserInput.InputBegan:Connect(function(input, gameProcessed)
-            if not gameProcessed and input.UserInputType == Enum.UserInputType.Keyboard then
-                local keyName = input.KeyCode.Name
-                settings[text] = keyName
-                save()
-                label.Text = text .. ": [" .. keyName .. "]"
-                conn:Disconnect()
-            end
-        end)
-    end)
-
-    -- Key trigger listener
-    UserInput.InputBegan:Connect(function(input, gameProcessed)
-        if not gameProcessed and input.UserInputType == Enum.UserInputType.Keyboard then
-            if input.KeyCode.Name == settings[text] then
-                pcall(callback)
-            end
-        end
-    end)
-end
-
-
--- Export
 return UILib
