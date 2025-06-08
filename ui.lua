@@ -260,26 +260,46 @@ end
 
 function UILib:AddKeybind(tab, text, defaultKey, callback)
     settings[text] = settings[text] or defaultKey
-    local btn = Instance.new("TextButton", tab)
-    btn.Text = text..": "..settings[text]
-    btn.Size = UDim2.new(1,-20,0,30)
-    btn.Position = UDim2.new(0,10,0,(#tab:GetChildren())*35)
-    btn.TextColor3 = Color3.new(1,1,1)
-    
-    btn.MouseButton1Click:Connect(function()
-        btn.Text = text..": [Press Key]"
+
+    local label = Instance.new("TextLabel", tab)
+    label.Text = text .. ": [" .. settings[text] .. "]"
+    label.Size = UDim2.new(1, -20, 0, 30)
+    label.Position = UDim2.new(0, 10, 0, (#tab:GetChildren()) * 35)
+    label.TextColor3 = Color3.new(1, 1, 1)
+    label.BackgroundTransparency = 1
+    label.TextXAlignment = Enum.TextXAlignment.Left
+
+    local changeBtn = Instance.new("TextButton", tab)
+    changeBtn.Text = "Change"
+    changeBtn.Size = UDim2.new(0, 60, 0, 30)
+    changeBtn.Position = UDim2.new(1, -70, 0, (#tab:GetChildren() - 1) * 35)
+    changeBtn.BackgroundColor3 = Color3.fromRGB(70, 70, 70)
+    changeBtn.TextColor3 = Color3.new(1, 1, 1)
+
+    changeBtn.MouseButton1Click:Connect(function()
+        label.Text = text .. ": [Press any key]"
         local conn
-        conn = UserInput.InputBegan:Connect(function(i)
-            if i.UserInputType == Enum.UserInputType.Keyboard then
-                settings[text] = i.KeyCode.Name
+        conn = UserInput.InputBegan:Connect(function(input, gameProcessed)
+            if not gameProcessed and input.UserInputType == Enum.UserInputType.Keyboard then
+                local keyName = input.KeyCode.Name
+                settings[text] = keyName
                 save()
-                btn.Text = text..": "..i.KeyCode.Name
-                pcall(callback, i.KeyCode)
+                label.Text = text .. ": [" .. keyName .. "]"
                 conn:Disconnect()
             end
         end)
     end)
+
+    -- Key trigger listener
+    UserInput.InputBegan:Connect(function(input, gameProcessed)
+        if not gameProcessed and input.UserInputType == Enum.UserInputType.Keyboard then
+            if input.KeyCode.Name == settings[text] then
+                pcall(callback)
+            end
+        end
+    end)
 end
+
 
 -- Export
 return UILib
