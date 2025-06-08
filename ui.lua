@@ -148,10 +148,11 @@ function UILib:CreateTab(name)
     Tabs[name] = tabFrame
     
     -- make first tab default
-    if not currentTab then
-        btn:CaptureFocus()
-        btn:MouseButton1Click()
-    end
+if not currentTab then
+    tabFrame.Visible = true
+    currentTab = tabFrame
+end
+
     
     return tabFrame
 end
